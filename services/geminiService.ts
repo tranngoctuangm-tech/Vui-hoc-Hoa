@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, Analysis, StudySummary } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 const cleanJsonString = (str: string) => {
   return str.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -101,7 +101,6 @@ export const analyzeResults = async (questions: Question[], answers: any[]): Pro
   try {
     return JSON.parse(cleanJsonString(response.text));
   } catch (e) {
-    console.error("Lỗi parse analysis:", e);
     return {
       strengths: ["Cố gắng hoàn thành bài tập"],
       weaknesses: ["Chưa xác định rõ lỗ hổng"],
@@ -111,7 +110,7 @@ export const analyzeResults = async (questions: Question[], answers: any[]): Pro
   }
 };
 
-export const askChemistryAgent = async (history: { role: 'user' | 'model', parts: { text: string }[] }[], message: string) => {
+export const askChemistryAgent = async (history: any[], message: string) => {
   const chat = ai.chats.create({
     model: 'gemini-3-pro-preview',
     history: history,
