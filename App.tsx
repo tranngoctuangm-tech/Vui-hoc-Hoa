@@ -1,21 +1,27 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, QuizResult, Question, Analysis as AnalysisType, LeaderboardEntry } from './types';
-import { generateQuiz, analyzeResults } from './services/geminiService';
+import { User, QuizResult, Question, Analysis as AnalysisType, LeaderboardEntry, StudySummary } from './types';
+import { generateQuiz, analyzeResults, getTopicSummary } from './services/geminiService';
 import Quiz from './components/Quiz';
 import Analysis from './components/Analysis';
 import ChatBot from './components/ChatBot';
-import { Beaker, BrainCircuit, GraduationCap, LayoutDashboard, ListOrdered, LogOut, Search, Sparkles, Loader2, ArrowRight, BookOpen, Star, Clock } from 'lucide-react';
+import { 
+  Beaker, BrainCircuit, GraduationCap, LayoutDashboard, 
+  ListOrdered, LogOut, Search, Sparkles, Loader2, 
+  ArrowRight, BookOpen, Star, Clock, FileText, 
+  Globe, Github, Code, Download 
+} from 'lucide-react';
 
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string | null>(localStorage.getItem('chem_user'));
   const [tempName, setTempName] = useState('');
-  const [view, setView] = useState<'home' | 'quiz' | 'analysis' | 'leaderboard'>('home');
+  const [view, setView] = useState<'home' | 'quiz' | 'analysis' | 'leaderboard' | 'materials' | 'guide'>('home');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentResult, setCurrentResult] = useState<QuizResult | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("AI đang chuẩn bị nội dung...");
+  const [activeMaterial, setActiveMaterial] = useState<StudySummary | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(
     JSON.parse(localStorage.getItem('chem_leaderboard') || '[]')
   );
@@ -48,13 +54,36 @@ const App: React.FC = () => {
     }
   };
 
+  const loadMaterial = async (topic: string) => {
+    setIsLoading(true);
+    setLoadingMsg(`AI đang tóm tắt kiến thức ${topic}...`);
+    try {
+      const summary = await getTopicSummary(topic);
+      setActiveMaterial(summary);
+      setView('materials');
+    } catch (err) {
+      alert("Không thể tải tài liệu lúc này.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exportData = () => {
+    const data = leaderboard.map(e => `${e.name},${e.score},${e.date}`).join('\n');
+    const blob = new Blob([`Tên,Điểm,Ngày\n${data}`], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chem_master_progress_${userName}.csv`;
+    a.click();
+  };
+
   const onQuizFinish = async (result: QuizResult) => {
     setIsLoading(true);
     setLoadingMsg("AI đang nghiên cứu bài làm của bạn...");
     setView('analysis');
     setCurrentResult(result);
     
-    // Update leaderboard
     const newEntry: LeaderboardEntry = { name: userName!, score: result.score, date: result.date };
     const newLeaderboard = [...leaderboard, newEntry]
       .sort((a, b) => b.score - a.score)
@@ -122,7 +151,6 @@ const App: React.FC = () => {
                 Vào học ngay <ArrowRight className="w-5 h-5" />
               </button>
             </form>
-            <p className="mt-8 text-center text-xs text-slate-400 font-medium">Phiên bản chính thức 1.0.0 • Powered by Gemini AI</p>
           </div>
         </div>
       </div>
@@ -131,7 +159,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      {/* Sidebar - Desktop Only */}
       <aside className="hidden md:flex w-72 bg-white border-r border-slate-200 flex-col shrink-0 sticky top-0 h-screen">
         <div className="p-8 border-b flex items-center gap-3">
           <div className="bg-indigo-600 p-2 rounded-xl shadow-md">
@@ -155,6 +182,20 @@ const App: React.FC = () => {
             <ListOrdered className="w-6 h-6" />
             Bảng xếp hạng
           </button>
+          <button 
+            onClick={() => loadMaterial('Cấu tạo nguyên tử')}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all ${view === 'materials' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <FileText className="w-6 h-6" />
+            Tài liệu học tập
+          </button>
+          <button 
+            onClick={() => setView('guide')}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all ${view === 'guide' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <Globe className="w-6 h-6" />
+            Hướng dẫn xuất bản
+          </button>
         </nav>
         
         <div className="p-6 border-t">
@@ -164,34 +205,17 @@ const App: React.FC = () => {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="font-bold text-slate-900 truncate">{userName}</p>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Gold Student</p>
+              <button onClick={exportData} className="text-[10px] font-bold text-indigo-600 flex items-center gap-1 hover:underline">
+                <Download className="w-3 h-3" /> XUẤT DỮ LIỆU
+              </button>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-5 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-all text-sm font-bold"
-          >
-            <LogOut className="w-4 h-4" />
-            Đăng xuất
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-5 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-all text-sm font-bold">
+            <LogOut className="w-4 h-4" /> Đăng xuất
           </button>
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <header className="md:hidden bg-white border-b border-slate-200 p-4 sticky top-0 z-50 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-indigo-600" />
-          <span className="font-black text-xl text-slate-900">ChemMaster</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView('leaderboard')} className="p-2 text-slate-500"><ListOrdered className="w-5 h-5" /></button>
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xs" onClick={() => setView('home')}>
-            {userName[0].toUpperCase()}
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto relative">
         {isLoading && view !== 'quiz' && (
           <div className="fixed inset-0 bg-white/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-center p-6">
@@ -200,7 +224,7 @@ const App: React.FC = () => {
               <Beaker className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-indigo-600" />
             </div>
             <h3 className="font-black text-2xl text-slate-900 mb-2">{loadingMsg}</h3>
-            <p className="text-slate-500 font-medium">Trí tuệ nhân tạo đang làm việc để tạo ra nội dung tốt nhất cho bạn.</p>
+            <p className="text-slate-500 font-medium">Đang xử lý dữ liệu qua Gemini AI...</p>
           </div>
         )}
 
@@ -209,170 +233,144 @@ const App: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">Chào {userName}! 🚀</h1>
-                <p className="text-lg text-slate-500 font-medium">Hôm nay là một ngày tuyệt vời để học Hóa.</p>
-              </div>
-              <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-sm font-bold text-slate-600">AI Tutor: Online</span>
+                <p className="text-lg text-slate-500 font-medium">Bảng điều khiển học tập cá nhân của bạn.</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-2xl shadow-indigo-200 group">
+              <div className="lg:col-span-2 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-2xl group">
                 <div className="relative z-10 flex flex-col h-full">
                   <div className="mb-auto">
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-white/20 text-xs font-black uppercase tracking-widest mb-6">Thách thức hôm nay</span>
-                    <h3 className="text-4xl font-black mb-4 leading-tight">Bài kiểm tra<br/>Năng lực Tổng hợp</h3>
-                    <p className="text-indigo-100 text-lg mb-8 max-w-md opacity-90 font-medium">Hệ thống AI sẽ quét toàn bộ kiến thức của bạn để lập biểu đồ hổng kiến thức chỉ sau 20 câu hỏi.</p>
+                    <h3 className="text-4xl font-black mb-4 leading-tight">Bắt đầu ôn luyện</h3>
+                    <p className="text-indigo-100 text-lg mb-8 max-w-md opacity-90 font-medium">Hệ thống sẽ tự động điều chỉnh độ khó dựa trên lịch sử làm bài của bạn.</p>
                   </div>
-                  <button 
-                    onClick={() => startQuiz()}
-                    disabled={isLoading}
-                    className="w-full sm:w-fit bg-white text-indigo-600 px-10 py-5 rounded-[1.25rem] font-black text-lg hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 group"
-                  >
-                    Bắt đầu Kiểm tra ngay
-                    <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                  <button onClick={() => startQuiz()} className="w-full sm:w-fit bg-white text-indigo-600 px-10 py-5 rounded-[1.25rem] font-black text-lg hover:bg-indigo-50 transition-all flex items-center justify-center gap-3">
+                    Làm bài tổng hợp <ArrowRight className="w-6 h-6" />
                   </button>
                 </div>
-                <BrainCircuit className="absolute -right-16 -bottom-16 w-80 h-80 text-white opacity-10 rotate-12 group-hover:rotate-0 transition-all duration-700" />
               </div>
-
-              <div className="space-y-6">
-                <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50">
-                  <h4 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-3">
-                    <GraduationCap className="w-6 h-6 text-indigo-600" />
-                    Lộ trình ưu tiên
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-xl">
+                 <h4 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-3">
+                    <BookOpen className="w-6 h-6 text-indigo-600" />
+                    Đọc nhanh kiến thức
                   </h4>
-                  <div className="space-y-5">
-                    {[
-                      { topic: "Cấu tạo nguyên tử", color: "bg-emerald-500", progress: "85%" },
-                      { topic: "Bảng tuần hoàn", color: "bg-indigo-500", progress: "40%" },
-                      { topic: "Phản ứng Redox", color: "bg-rose-500", progress: "10%" }
-                    ].map((m, i) => (
-                      <div key={i} className="space-y-2">
-                        <div className="flex justify-between items-center text-sm font-bold text-slate-700">
-                          <span>{m.topic}</span>
-                          <span className="text-xs text-slate-400">{m.progress}</span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden">
-                          <div className={`h-full ${m.color}`} style={{ width: m.progress }} />
-                        </div>
-                      </div>
+                  <div className="space-y-4">
+                    {['Cấu tạo nguyên tử', 'Bảng tuần hoàn', 'Liên kết hóa học'].map(t => (
+                      <button key={t} onClick={() => loadMaterial(t)} className="w-full text-left p-4 rounded-xl border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all font-bold text-slate-700 flex justify-between items-center group">
+                        {t}
+                        <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all" />
+                      </button>
                     ))}
                   </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'materials' && activeMaterial && (
+          <div className="max-w-4xl mx-auto p-6 md:p-10 animate-in slide-in-from-right duration-500">
+            <button onClick={() => setView('home')} className="mb-6 text-indigo-600 font-bold flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 rotate-180" /> Quay lại
+            </button>
+            <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100">
+              <div className="bg-indigo-600 p-10 text-white">
+                <h2 className="text-3xl font-black mb-2">{activeMaterial.topic}</h2>
+                <p className="text-indigo-100 font-medium">{activeMaterial.content}</p>
+              </div>
+              <div className="p-10 space-y-8">
+                <div>
+                  <h4 className="font-black text-xl text-slate-900 mb-4 flex items-center gap-2">
+                    <Star className="w-5 h-5 text-yellow-500" /> Kiến thức trọng tâm
+                  </h4>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {activeMaterial.keyPoints.map((p, i) => (
+                      <li key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 font-medium text-slate-700 flex gap-3">
+                        <span className="text-indigo-600 font-black">{i+1}.</span>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                
-                <div className="bg-slate-900 rounded-[2rem] p-8 text-white shadow-xl">
-                  <div className="flex items-center gap-3 mb-4">
-                    <BookOpen className="w-5 h-5 text-indigo-400" />
-                    <span className="font-bold text-slate-400 text-sm">Học nhanh cùng AI</span>
-                  </div>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-6 font-medium">"Bạn có biết: Cân bằng phản ứng Oxi hóa khử bằng phương pháp thăng bằng electron là nền tảng quan trọng nhất của Hóa 10?"</p>
-                  <button className="text-indigo-400 font-bold text-sm hover:underline flex items-center gap-1">Tìm hiểu thêm <ArrowRight className="w-3 h-3" /></button>
+                <div className="bg-indigo-50 rounded-2xl p-6 border border-indigo-100">
+                   <h4 className="font-black text-indigo-900 mb-2">💡 Ví dụ minh họa:</h4>
+                   <p className="text-indigo-800 leading-relaxed italic">{activeMaterial.example}</p>
                 </div>
               </div>
             </div>
-            
-            <section>
-              <div className="flex items-center justify-between mb-8">
-                <h4 className="font-black text-2xl text-slate-900 tracking-tight">Ôn tập theo chuyên đề</h4>
-                <button className="text-indigo-600 font-bold text-sm hover:underline">Xem tất cả</button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {[
-                  { name: 'Cấu tạo nguyên tử', desc: 'Hạt nhân, lớp vỏ, obitan', icon: '⚛️' },
-                  { name: 'Bảng tuần hoàn', desc: 'Chu kỳ, nhóm, quy luật', icon: '📅' },
-                  { name: 'Liên kết hóa học', desc: 'Cộng hóa trị, ion', icon: '🔗' },
-                  { name: 'Phản ứng Redox', desc: 'Số oxi hóa, cân bằng', icon: '⚡' }
-                ].map((topic, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => startQuiz(topic.name)}
-                    disabled={isLoading}
-                    className="group text-left bg-white p-6 rounded-[1.75rem] border border-slate-100 shadow-sm hover:border-indigo-400 hover:shadow-2xl hover:shadow-indigo-100 transition-all active:scale-[0.97] flex flex-col"
-                  >
-                    <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-6 text-3xl group-hover:bg-indigo-50 transition-colors">
-                      {topic.icon}
-                    </div>
-                    <p className="font-black text-lg text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{topic.name}</p>
-                    <p className="text-sm font-medium text-slate-400">{topic.desc}</p>
-                    <div className="mt-6 flex items-center gap-2 text-indigo-600 font-bold text-sm opacity-0 group-hover:opacity-100 transition-all">
-                      Học ngay <ArrowRight className="w-4 h-4" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-            
-            <footer className="pt-10 border-t border-slate-200 text-center text-slate-400 text-xs font-bold uppercase tracking-widest pb-10">
-              ChemMaster v1.0 • Final Release • © 2025 AI Education
-            </footer>
           </div>
         )}
 
-        {view === 'quiz' && (
-          <div className="min-h-full flex items-center justify-center p-4">
-            <Quiz questions={questions} onFinish={onQuizFinish} />
+        {view === 'guide' && (
+          <div className="max-w-4xl mx-auto p-6 md:p-10 animate-in slide-in-from-bottom-8 duration-700">
+            <div className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden text-white">
+              <div className="p-12 border-b border-white/10">
+                <Globe className="w-16 h-16 text-indigo-400 mb-6" />
+                <h2 className="text-4xl font-black mb-4">Hướng dẫn Triển khai</h2>
+                <p className="text-slate-400 text-lg">Cách đưa ứng dụng ChemMaster của bạn lên môi trường sản phẩm thực tế.</p>
+              </div>
+              <div className="p-12 space-y-12">
+                <div className="space-y-6">
+                  <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg">1</div>
+                    <div>
+                      <h4 className="text-xl font-bold mb-2">Chuẩn bị mã nguồn</h4>
+                      <p className="text-slate-400 mb-4">Tải toàn bộ thư mục dự án lên một kho lưu trữ (Repository) trên **GitHub**.</p>
+                      <div className="bg-black/50 p-4 rounded-xl border border-white/5 font-mono text-sm text-indigo-300">
+                        git add . <br/>
+                        git commit -m "Initial commit" <br/>
+                        git push origin main
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg">2</div>
+                    <div>
+                      <h4 className="text-xl font-bold mb-2">Kết nối Hosting (Vercel)</h4>
+                      <p className="text-slate-400 mb-4">Truy cập **Vercel.com**, đăng nhập bằng GitHub và chọn "Add New Project".</p>
+                      <ul className="list-disc ml-4 text-slate-400 space-y-1">
+                        <li>Chọn Repo "ChemMaster"</li>
+                        <li>Framework: Vite (Mặc định)</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg">3</div>
+                    <div>
+                      <h4 className="text-xl font-bold mb-2">Cài đặt Biến môi trường (QUAN TRỌNG)</h4>
+                      <p className="text-slate-400 mb-4">Tại phần **Environment Variables**, thêm biến API_KEY.</p>
+                      <div className="bg-rose-500/10 p-4 rounded-xl border border-rose-500/20 flex items-center gap-3 text-rose-300">
+                        <Code className="w-5 h-5" />
+                        <span>Key: <b>API_KEY</b> | Value: [Dán mã khóa Gemini của bạn]</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-10 border-t border-white/10 text-center">
+                  <p className="text-slate-500 text-sm italic">"Ứng dụng sẽ tự động được cập nhật mỗi khi bạn đẩy mã mới lên GitHub."</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {view === 'analysis' && currentResult && analysis && (
-          <Analysis 
-            result={currentResult} 
-            analysis={analysis} 
-            onRestart={() => setView('home')} 
-          />
-        )}
-
+        {view === 'quiz' && <div className="min-h-full flex items-center justify-center p-4"><Quiz questions={questions} onFinish={onQuizFinish} /></div>}
+        {view === 'analysis' && currentResult && analysis && <Analysis result={currentResult} analysis={analysis} onRestart={() => setView('home')} />}
         {view === 'leaderboard' && (
           <div className="max-w-3xl mx-auto p-6 md:p-10 animate-in slide-in-from-bottom-8 duration-700">
             <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100">
               <div className="bg-indigo-600 p-12 text-white text-center relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
-                <div className="relative z-10">
-                  <ListOrdered className="w-16 h-16 mx-auto mb-6 text-indigo-200" />
-                  <h2 className="text-4xl font-black mb-2 tracking-tight">Bảng Vàng ChemMaster</h2>
-                  <p className="text-indigo-100 font-medium text-lg">Vinh danh những học sinh xuất sắc nhất</p>
-                </div>
+                <ListOrdered className="w-16 h-16 mx-auto mb-6 text-indigo-200" />
+                <h2 className="text-4xl font-black mb-2 tracking-tight">Bảng Vàng ChemMaster</h2>
               </div>
-              <div className="p-4 md:p-8">
-                {leaderboard.length > 0 ? (
-                  <div className="space-y-3">
-                    {leaderboard.map((entry, idx) => (
-                      <div key={idx} className={`flex items-center gap-5 p-5 rounded-2xl transition-all border ${
-                        idx === 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-50 hover:border-indigo-100'
-                      }`}>
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
-                          idx === 0 ? 'bg-yellow-400 text-yellow-900 shadow-lg shadow-yellow-200' :
-                          idx === 1 ? 'bg-slate-200 text-slate-600' :
-                          idx === 2 ? 'bg-orange-100 text-orange-700' :
-                          'text-slate-300 bg-slate-50'
-                        }`}>
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`font-black text-lg ${idx === 0 ? 'text-yellow-900' : 'text-slate-800'}`}>{entry.name}</p>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date(entry.date).toLocaleDateString('vi-VN')}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-black text-indigo-600 leading-none">{entry.score}</p>
-                          <p className="text-[10px] text-slate-400 uppercase font-black mt-1">Điểm</p>
-                        </div>
-                      </div>
-                    ))}
+              <div className="p-8">
+                {leaderboard.map((entry, idx) => (
+                  <div key={idx} className="flex items-center gap-5 p-5 rounded-2xl transition-all border border-slate-50 mb-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black bg-indigo-50 text-indigo-600">{idx+1}</div>
+                    <div className="flex-1 font-bold text-slate-800">{entry.name}</div>
+                    <div className="text-2xl font-black text-indigo-600">{entry.score}</div>
                   </div>
-                ) : (
-                  <div className="py-24 text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
-                      <Star className="w-10 h-10" />
-                    </div>
-                    <p className="text-slate-400 font-bold">Chưa có dữ liệu bảng xếp hạng</p>
-                  </div>
-                )}
+                ))}
               </div>
-            </div>
-            <div className="mt-8 text-center">
-              <button onClick={() => setView('home')} className="text-indigo-600 font-black hover:underline">Quay lại bảng điều khiển</button>
             </div>
           </div>
         )}

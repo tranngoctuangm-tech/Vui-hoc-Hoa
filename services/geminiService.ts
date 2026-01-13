@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Question, Analysis } from "../types";
+import { Question, Analysis, StudySummary } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -47,6 +47,28 @@ export const generateQuiz = async (topic?: string): Promise<Question[]> => {
     console.error("Lỗi parse quiz:", e, response.text);
     throw new Error("Không thể tạo bài kiểm tra.");
   }
+};
+
+export const getTopicSummary = async (topic: string): Promise<StudySummary> => {
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Tóm tắt kiến thức cốt lõi cho học sinh bị hổng kiến thức Hóa 10 về chủ đề: ${topic}. 
+    Nội dung cần cực kỳ dễ hiểu, ngắn gọn. Trả về JSON.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING },
+          content: { type: Type.STRING },
+          keyPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
+          example: { type: Type.STRING }
+        },
+        required: ["topic", "content", "keyPoints", "example"]
+      }
+    }
+  });
+  return JSON.parse(cleanJsonString(response.text));
 };
 
 export const analyzeResults = async (questions: Question[], answers: any[]): Promise<Analysis> => {

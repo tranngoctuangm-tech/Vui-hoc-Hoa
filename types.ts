@@ -39,3 +39,10 @@ export interface LeaderboardEntry {
   score: number;
   date: string;
 }
+
+export interface StudySummary {
+  topic: string;
+  content: string;
+  keyPoints: string[];
+  example: string;
+}
