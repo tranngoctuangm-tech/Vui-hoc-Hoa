@@ -1,0 +1,7 @@
+{
+  "name": "ChemMaster Pro - Gia Sư Hóa Học AI",
+  "short_name": "ChemMaster",
+  "description": "Nền tảng ôn luyện Hóa học lớp 10 cá nhân hóa sử dụng trí tuệ nhân tạo Gemini 3. Phân tích lỗ hổng kiến thức và xây dựng lộ trình học tập tự động.",
+  "version": "1.0.0",
+  "requestFramePermissions": []
+}
